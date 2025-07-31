@@ -30,7 +30,7 @@ class MeshWithDelaysResp[T <: Data: Arithmetic, TagT <: TagQueueTag with Data](o
 // TODO make all inputs go straight into registers to help with physical design
 
 class MeshWithDelays[T <: Data: Arithmetic, U <: TagQueueTag with Data]
-  (inputType: T, val outputType: T, accType: T,
+  (inputType: T, val outputType: T, accType: T, testType: T,
    tagType: U, df: Dataflow.Value, tree_reduction: Boolean, tile_latency: Int, output_delay: Int,
    tileRows: Int, tileColumns: Int, meshRows: Int, meshColumns: Int,
    leftBanks: Int, upBanks: Int, outBanks: Int = 1, n_simultaneous_matmuls: Int = -1)
@@ -53,7 +53,7 @@ class MeshWithDelays[T <: Data: Arithmetic, U <: TagQueueTag with Data]
   }
   assert(max_simultaneous_matmuls >= 5 * latency_per_pe)
 
-  val tagqlen = max_simultaneous_matmuls+1
+  val tagqlen = max_simultaneous_matmuls+1 // 6
 
   val io = IO(new Bundle {
     val a = Flipped(Decoupled(A_TYPE))
@@ -90,26 +90,28 @@ class MeshWithDelays[T <: Data: Arithmetic, U <: TagQueueTag with Data]
     }
   }
 
-  val req = Reg(UDValid(new MeshWithDelaysReq(accType, tagType, block_size)))
+  val req = Reg(UDValid(new MeshWithDelaysReq(accType, tagType, block_size))) // 当前有效请求寄存器
 
-  val matmul_id = RegInit(0.U(log2Up(max_simultaneous_matmuls).W))
+  val matmul_id = RegInit(0.U(log2Up(max_simultaneous_matmuls).W))            // 当前矩阵ID
 
   val total_fires = req.bits.total_rows
-  val fire_counter = RegInit(0.U(log2Up(block_size).W))
+  val fire_counter = RegInit(0.U(log2Up(block_size).W))                       // 行计数器
 
+  // 输入缓冲
   val a_buf = RegEnable(io.a.bits, io.a.fire)
   val b_buf = RegEnable(io.b.bits, io.b.fire)
   val d_buf = RegEnable(io.d.bits, io.d.fire)
 
+  // 输入状态标记
   val a_written = RegInit(false.B)
   val b_written = RegInit(false.B)
   val d_written = RegInit(false.B)
 
-  val in_prop = Reg(UInt(1.W)) // TODO inelegant
+  val in_prop = Reg(UInt(1.W)) // TODO inelegant，传播控制状态
 
-  val input_next_row_into_spatial_array = req.valid && ((a_written && b_written && d_written) || req.bits.flush > 0.U)
+  val input_next_row_into_spatial_array = req.valid && ((a_written && b_written && d_written) || req.bits.flush > 0.U) // 指示所有外部输入已经就绪，可以向mesh中输入数据/计算状态？
 
-  val last_fire = fire_counter === total_fires - 1.U && input_next_row_into_spatial_array
+  val last_fire = fire_counter === total_fires - 1.U && input_next_row_into_spatial_array  
 
   when (io.req.fire) {
     req.push(io.req.bits)
@@ -253,4 +255,51 @@ class MeshWithDelays[T <: Data: Arithmetic, U <: TagQueueTag with Data]
   }
 
   assert(!(io.req.fire && !tagq.io.enq.ready && io.req.bits.flush === 0.U))
+
+//   // 实例化一个INT4的脉动阵列
+//   val mesh_INT4 = Module(new Mesh(testType, outputType, accType, df, tree_reduction, tile_latency, max_simultaneous_matmuls, output_delay, tileRows, tileColumns, meshRows, meshColumns))
+//   // Step 1: Assign all inputs with dummy values
+//   // for (r <- 0 until meshRows; t <- 0 until tileRows) {
+//   //   mesh_INT4.io.in_a(r)(t) := 0.S
+//   // }
+//   // for (c <- 0 until meshColumns; t <- 0 until tileColumns) {
+//   //   mesh_INT4.io.in_b(c)(t) := 0.S
+//   //   mesh_INT4.io.in_d(c)(t) := 0.S
+
+//   //   mesh_INT4.io.in_valid(c)(t) := false.B
+//   //   mesh_INT4.io.in_last(c)(t) := false.B
+//   //   mesh_INT4.io.in_id(c)(t) := 0.U
+
+//   //   mesh_INT4.io.in_control(c)(t).shift := false.B
+//   //   mesh_INT4.io.in_control(c)(t).dataflow := 0.U  // assuming Enum is UInt
+//   //   mesh_INT4.io.in_control(c)(t).propagate := false.B
+//   // }
+//   for (r <- 0 until meshRows; t <- 0 until tileRows) {
+//     mesh_INT4.io.in_a(r)(t) := mesh.io.in_a(r)(t).asTypeOf(testType)
+//   }
+//   for (c <- 0 until meshColumns; t <- 0 until tileColumns) {
+//     mesh_INT4.io.in_b(c)(t) := mesh.io.in_b(c)(t).asTypeOf(testType)
+//     mesh_INT4.io.in_d(c)(t) := mesh.io.in_d(c)(t).asTypeOf(testType)
+//   }
+//   for (c <- 0 until meshColumns; t <- 0 until tileColumns) {
+//   mesh_INT4.io.in_control(c)(t) := mesh.io.in_control(c)(t)
+//   mesh_INT4.io.in_valid(c)(t)   := mesh.io.in_valid(c)(t)
+//   mesh_INT4.io.in_id(c)(t)      := mesh.io.in_id(c)(t)
+//   mesh_INT4.io.in_last(c)(t)    := mesh.io.in_last(c)(t)
+//  }
+//   // Step 2: Combine all outputs into a single 1-bit wire
+//   val all_outputs = mesh_INT4.io.out_b.flatten ++
+//                     mesh_INT4.io.out_c.flatten ++
+//                     mesh_INT4.io.out_valid.flatten ++
+//                     mesh_INT4.io.out_control.flatten.map(_.shift) ++
+//                     mesh_INT4.io.out_control.flatten.map(_.dataflow) ++
+//                     mesh_INT4.io.out_control.flatten.map(_.propagate) ++
+//                     mesh_INT4.io.out_id.flatten ++
+//                     mesh_INT4.io.out_last.flatten
+
+//   // Reduce to 1-bit to prevent synthesis pruning
+//   val mesh_output_used = all_outputs.map(_.asUInt).reduce(_ ^ _)(0)
+
+//   // Prevent optimization
+//   dontTouch(mesh_output_used)
 }

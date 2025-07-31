@@ -312,10 +312,10 @@ class ReservationStation[T <: Data : Arithmetic, U <: Data, V <: Data](config: G
       dst.bits.wraps_around := dst.bits.start.add_with_overflow(total_mvin_rows)._2
     }
 
-    val is_load = funct === LOAD_CMD || funct === LOAD2_CMD || funct === LOAD3_CMD || (funct === CONFIG_CMD && config_cmd_type === CONFIG_LOAD)
-    val is_ex = funct === PRELOAD_CMD || funct_is_compute || (funct === CONFIG_CMD && config_cmd_type === CONFIG_EX)
-    val is_store = funct === STORE_CMD || (funct === CONFIG_CMD && (config_cmd_type === CONFIG_STORE || config_cmd_type === CONFIG_NORM))
-    val is_norm = funct === CONFIG_CMD && config_cmd_type === CONFIG_NORM // normalization commands are a subset of store commands, so they still go in the store queue
+    val is_load     = funct === LOAD_CMD || funct === LOAD2_CMD || funct === LOAD3_CMD || (funct === CONFIG_CMD && config_cmd_type === CONFIG_LOAD)
+    val is_ex       = funct === PRELOAD_CMD || funct_is_compute || (funct === CONFIG_CMD && config_cmd_type === CONFIG_EX)
+    val is_store    = funct === STORE_CMD || (funct === CONFIG_CMD && (config_cmd_type === CONFIG_STORE || config_cmd_type === CONFIG_NORM))
+    val is_norm     = funct === CONFIG_CMD && config_cmd_type === CONFIG_NORM // normalization commands are a subset of store commands, so they still go in the store queue
     val is_add_test = funct === ADD_TEST || funct === PRINT //2021.11.10修改
 
     //判断指令将被放置到哪个队列中
@@ -390,11 +390,11 @@ class ReservationStation[T <: Data : Arithmetic, U <: Data, V <: Data](config: G
           // looking for the first invalid entry；找到第一个无效条目
           val alloc_id = MuxCase((entries_count - 1).U, entries_type.zipWithIndex.map { case (e, i) => !e.valid -> i.U })
 
-          when (!entries_type(alloc_id).valid) {    //如果找到的槽是无效的
-            io.alloc.ready := true.B                //表示可以接受新的分配请求
-            entries_type(alloc_id).valid := true.B  //将找到的槽标记为有效
-            entries_type(alloc_id).bits := new_entry//将新条目分配到找到的槽中
-            new_allocs_type(alloc_id) := true.B     //标记该槽为新分配的
+          when (!entries_type(alloc_id).valid) {     //如果找到的槽是无效的
+            io.alloc.ready := true.B                 //表示可以接受新的分配请求
+            entries_type(alloc_id).valid := true.B   //将找到的槽标记为有效
+            entries_type(alloc_id).bits := new_entry //将新条目分配到找到的槽中
+            new_allocs_type(alloc_id) := true.B      //标记该槽为新分配的
           }
         }
       }
@@ -446,9 +446,9 @@ class ReservationStation[T <: Data : Arithmetic, U <: Data, V <: Data](config: G
     // use the most significant 2 bits to indicate instruction type
     io.rob_id := global_issue_id         //将全局发出ID设置为重排序缓冲区ID?
 
-    val complete_on_issue = entries_type(issue_id).bits.complete_on_issue//指示条目是否在发出时完成
-    val from_conv_fsm = entries_type(issue_id).bits.cmd.from_conv_fsm    //指示条目是否来自卷积有限状态机
-    val from_matmul_fsm = entries_type(issue_id).bits.cmd.from_matmul_fsm//指示条目是否来自矩阵乘法有限状态机
+    val complete_on_issue = entries_type(issue_id).bits.complete_on_issue //指示条目是否在发出时完成
+    val from_conv_fsm = entries_type(issue_id).bits.cmd.from_conv_fsm     //指示条目是否来自卷积有限状态机
+    val from_matmul_fsm = entries_type(issue_id).bits.cmd.from_matmul_fsm //指示条目是否来自矩阵乘法有限状态机
 
 
     when (io.fire()) {
@@ -466,7 +466,7 @@ class ReservationStation[T <: Data : Arithmetic, U <: Data, V <: Data](config: G
         entries_type_.zipWithIndex.foreach { case (e, i) =>
           val deps_type = if (q == ldq) e.bits.deps_ld
                           else if (q == exq) e.bits.deps_ex 
-                          else if(q == stq) e.bits.deps_st
+                          else if (q == stq) e.bits.deps_st
                           else e.bits.deps_add_test //2021.11.10修改
           when (q === q_) {
             deps_type(issue_id) := false.B

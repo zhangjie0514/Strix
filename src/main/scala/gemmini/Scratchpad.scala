@@ -1030,7 +1030,7 @@ class Scratchpad[T <: Data, U <: Data, V <: Data](config: GemminiArrayConfig[T, 
     ErrorCorrector.io.valid_in := io.srams.read(0).resp.valid
     ErrorCorrector.io.col_coordinate := 0.U
     ErrorCorrector.io.row_coordinate := 0.U
-    ErrorCorrector.io.difference := 0.S
+    ErrorCorrector.io.difference := inputType.zero
     val outputBits = ErrorCorrector.io.data_out.flatMap { elem =>
     // 如果accType是自定义Bundle，需要类似之前的Cat转换
     // 这里假设accType可以直接转UInt，否则需要自定义展开

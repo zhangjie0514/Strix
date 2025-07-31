@@ -126,3 +126,74 @@ class Add_test[T <: Data, U <: Data, V <: Data](config: GemminiArrayConfig[T, U,
     }
   }
 }
+
+// 两输入加法器模块（组合逻辑）
+class TwoInputAdder[T <: Data](inputType: T)(implicit ev: Arithmetic[T]) extends Module {
+  import ev._
+
+  val io = IO(new Bundle {
+    val a = Input(inputType)
+    val b = Input(inputType)
+    val sum = Output(inputType)
+  })
+  // 使用算术运算的加法操作
+  io.sum := io.a + io.b
+}
+
+class Adder[T <: Data](tileColumns: Int, inputType: T) (implicit ev: Arithmetic[T]) extends Module {
+  import ev._
+
+  val io = IO(new Bundle {
+    val dataIn = Input(Vec(math.pow(2, tileColumns).toInt, inputType))
+
+    val dataOut = Output(inputType) //6.W
+  })
+  dontTouch(io.dataIn)
+  dontTouch(io.dataOut)
+  val regs = Reg(Vec(math.pow(2, tileColumns).toInt, inputType))
+  regs := io.dataIn
+  val sum_reg = Reg(inputType)
+  io.dataOut := sum_reg
+  sum_reg := regs.reduce(_ + _)
+}
+
+class AdderTree[T <: Data](tileColumns: Int, inputType: T)(implicit ev: Arithmetic[T]) extends Module {
+  require(tileColumns >= 0, "Tile columns must be non-negative")
+  private val vecSize = math.pow(2, tileColumns).toInt
+  
+  val io = IO(new Bundle {
+    val dataIn  = Input(Vec(vecSize, inputType))
+    val dataOut = Output(inputType)
+  })
+  
+  dontTouch(io.dataIn)
+  dontTouch(io.dataOut)
+
+  // 输入寄存器
+  val regs = Reg(Vec(vecSize, inputType))
+  regs := io.dataIn
+
+  // 递归构建加法树
+  def buildAdditionTree(layer: Vec[T]): T = {
+    if (layer.length == 1) {
+      layer.head
+    } else {
+      // 每层将元素两两分组，实例化加法器
+      val nextLayer = VecInit((0 until layer.length by 2).map { i =>
+        val adder = Module(new TwoInputAdder(inputType))
+        adder.io.a := layer(i)
+        adder.io.b := layer(i + 1)
+        adder.io.sum
+      })
+      buildAdditionTree(nextLayer)
+    }
+  }
+
+  // 组合逻辑加法树结果
+  val sumComb = buildAdditionTree(regs)
+  
+  // 输出寄存器
+  val sumReg = Reg(inputType)
+  sumReg := sumComb
+  io.dataOut := sumReg
+}

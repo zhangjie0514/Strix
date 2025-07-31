@@ -24,6 +24,7 @@ object GemminiConfigs {
     accType = SInt(32.W),//原来是32
 
     spatialArrayOutputType = SInt(20.W),
+    testType = SInt(4.W),
 
     // Spatial array size options
     tileRows = 1,// 1
@@ -171,6 +172,7 @@ object GemminiConfigs {
   val dummyConfig = GemminiArrayConfig[DummySInt, Float, Float](
     inputType = DummySInt(8),//原来是8
     accType = DummySInt(32),//原来是32
+    testType = DummySInt(4),
     spatialArrayOutputType = DummySInt(20),
     tileRows     = defaultConfig.tileRows,
     tileColumns  = defaultConfig.tileColumns,

@@ -40,6 +40,7 @@ object DSEBaseConfig {
     dma_buswidth = 128, // TODO get this from SystemBusKey
     aligned_to = 16,
     inputType = SInt(8.W),
+    testType = SInt(4.W),
     spatialArrayOutputType = SInt(19.W),
     accType = SInt(32.W),
     mvin_scale_args = None,

@@ -300,7 +300,10 @@ class GemminiModule[T <: Data: Arithmetic, U <: Data, V <: Data]
   // Wire up scratchpad to controllers
   spad.module.io.dma.read <> load_controller.io.dma
   spad.module.io.dma.write <> store_controller.io.dma
-  ex_controller.io.srams.read <> spad.module.io.srams.read
+  for(i <- 0 until 4){
+    ex_controller.io.srams.read(i) <> spad.module.io.srams.read(i)
+  }
+  // ex_controller.io.srams.read <> spad.module.io.srams.read
   ex_controller.io.srams.write <> spad.module.io.srams.write
   spad.module.io.acc.read_req <> ex_controller.io.acc.read_req
   ex_controller.io.acc.read_resp <> spad.module.io.acc.read_resp
@@ -536,7 +539,7 @@ class GemminiModule[T <: Data: Arithmetic, U <: Data, V <: Data]
   spad.module.io.srams.read(0).resp.ready := ex_controller.io.srams.read(0).resp.ready */
   
   // 批量生成 4 个 LatencySimulation_ReadSpad 模块并连接
-  /* for (i <- 0 until sp_banks) {
+  /* for (i <- 0 until 1) {
     // 1. 创建模块实例
     val latencyModule = Module(new LatencySimulation_ReadSpad(
       inputType.getWidth * meshRows * tileRows,
@@ -560,6 +563,7 @@ class GemminiModule[T <: Data: Arithmetic, U <: Data, V <: Data]
     ex_controller.io.srams.read(i).resp.valid        := latencyModule.io.valid_out
     spad.module.io.srams.read(i).resp.ready          := ex_controller.io.srams.read(i).resp.ready
   } */
+
   ex_controller.io.Verification_completed_in := spad.module.io.Verification_completed
   ex_controller.io.addr_banks := spad.module.io.addr_banks
 
@@ -593,4 +597,10 @@ class GemminiModule[T <: Data: Arithmetic, U <: Data, V <: Data]
     printf(p"frequency of compute = $latency_Reg_compute\n")
     printf(p"frequency of compute_1 = $latency_Reg_compute_1\n")
   }
+
+  val Adder = Module(new Adder(tileColumns, inputType))
+  Adder.io.dataIn := DontCare
+  val AdderTree = Module(new AdderTree(tileColumns, inputType))
+  AdderTree.io.dataIn := DontCare
+
 }

@@ -20,6 +20,7 @@ case class GemminiArrayConfig[T <: Data : Arithmetic, U <: Data, V <: Data](
                                                                              inputType: T,
                                                                              spatialArrayOutputType: T,
                                                                              accType: T,
+                                                                             testType: T,
 
                                                                              dataflow: Dataflow.Value = Dataflow.BOTH,
 

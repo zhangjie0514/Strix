@@ -190,13 +190,14 @@ class ExecuteController[T <: Data, U <: Data, V <: Data](xLen: Int, tagWidth: In
 
   // Instantiate a queue which queues up signals which must be fed into the mesh
   val mesh_cntl_signals_q = Module(new Queue(new ComputeCntlSignals, spad_read_delay+1, pipe=true))
-  //val mesh_cntl_signals_q = Module(new Queue(new ComputeCntlSignals, 100, pipe=true))
+  val mesh_cntl_signals_r_preload = RegInit(0.U.asTypeOf(new ComputeCntlSignals))
+  val mesh_cntl_signals_r_compute = RegInit(0.U.asTypeOf(new ComputeCntlSignals))
   val cntl_ready = mesh_cntl_signals_q.io.enq.ready
   val cntl_valid = mesh_cntl_signals_q.io.deq.valid
   val cntl = mesh_cntl_signals_q.io.deq.bits
 
   // Instantiate the actual mesh
-  val mesh = Module(new MeshWithDelays(inputType, spatialArrayOutputType, accType, mesh_tag, dataflow, tree_reduction, tile_latency, mesh_output_delay,
+  val mesh = Module(new MeshWithDelays(inputType, spatialArrayOutputType, accType, testType, mesh_tag, dataflow, tree_reduction, tile_latency, mesh_output_delay,
     tileRows, tileColumns, meshRows, meshColumns, shifter_banks, shifter_banks))
 
   mesh.io.a.valid := false.B
@@ -852,6 +853,118 @@ class ExecuteController[T <: Data, U <: Data, V <: Data](xLen: Int, tagWidth: In
 
   mesh_cntl_signals_q.io.enq.bits.first := !a_fire_started && !b_fire_started && !d_fire_started
 
+  // 尝试用寄存器代替队列
+  dontTouch(mesh_cntl_signals_r_preload)
+  dontTouch(mesh_cntl_signals_r_compute)
+  when(computing && cmd.bits(0).cmd.inst.funct === 6.U){
+    
+  mesh_cntl_signals_r_preload.perform_mul_pre := performing_mul_pre
+  mesh_cntl_signals_r_preload.perform_single_mul := performing_single_mul
+  mesh_cntl_signals_r_preload.perform_single_preload := performing_single_preload
+
+  mesh_cntl_signals_r_preload.a_bank := dataAbank
+  mesh_cntl_signals_r_preload.b_bank := dataBbank
+  mesh_cntl_signals_r_preload.d_bank := dataDbank
+
+  mesh_cntl_signals_r_preload.a_bank_acc := dataABankAcc
+  mesh_cntl_signals_r_preload.b_bank_acc := dataBBankAcc
+  mesh_cntl_signals_r_preload.d_bank_acc := dataDBankAcc
+
+  mesh_cntl_signals_r_preload.a_garbage := a_garbage
+  mesh_cntl_signals_r_preload.b_garbage := b_garbage
+  mesh_cntl_signals_r_preload.d_garbage := d_garbage
+
+  mesh_cntl_signals_r_preload.a_read_from_acc := a_read_from_acc
+  mesh_cntl_signals_r_preload.b_read_from_acc := b_read_from_acc
+  mesh_cntl_signals_r_preload.d_read_from_acc := d_read_from_acc
+
+  mesh_cntl_signals_r_preload.accumulate_zeros := accumulate_zeros
+  mesh_cntl_signals_r_preload.preload_zeros := preload_zeros //&& (in_shift(19) =/= 1.U)) //fixed for negative shift?
+
+  mesh_cntl_signals_r_preload.a_unpadded_cols := Mux(a_row_is_not_all_zeros, a_cols, 0.U)
+  mesh_cntl_signals_r_preload.b_unpadded_cols := Mux(b_row_is_not_all_zeros, b_cols, 0.U)
+  mesh_cntl_signals_r_preload.d_unpadded_cols := Mux(d_row_is_not_all_zeros, d_cols, 0.U)
+
+  mesh_cntl_signals_r_preload.total_rows := total_rows
+
+  mesh_cntl_signals_r_preload.a_fire := a_fire
+  mesh_cntl_signals_r_preload.b_fire := b_fire
+  mesh_cntl_signals_r_preload.d_fire := d_fire
+
+  mesh_cntl_signals_r_preload.c_addr := c_address_rs2
+  mesh_cntl_signals_r_preload.c_rows := c_rows
+  mesh_cntl_signals_r_preload.c_cols := c_cols
+
+  mesh_cntl_signals_r_preload.a_transpose := a_transpose
+  mesh_cntl_signals_r_preload.bd_transpose := bd_transpose
+
+  mesh_cntl_signals_r_preload.rob_id.valid := !performing_single_mul && !c_address_rs2.is_garbage()
+  mesh_cntl_signals_r_preload.rob_id.bits := cmd.bits(preload_cmd_place).rob_id.bits
+
+  mesh_cntl_signals_r_preload.dataflow := current_dataflow
+  mesh_cntl_signals_r_preload.prop := Mux(performing_single_preload, in_prop_flush, in_prop)//prop) //available propagate or not?
+  mesh_cntl_signals_r_preload.shift := in_shift
+
+  mesh_cntl_signals_r_preload.im2colling := im2col_wire && im2col_en //im2col_wire
+
+  mesh_cntl_signals_r_preload.first := !a_fire_started && !b_fire_started && !d_fire_started
+
+  }
+  when(computing && (cmd.bits(0).cmd.inst.funct === 4.U || cmd.bits(0).cmd.inst.funct === 5.U)){
+    
+  mesh_cntl_signals_r_compute.perform_mul_pre := performing_mul_pre
+  mesh_cntl_signals_r_compute.perform_single_mul := performing_single_mul
+  mesh_cntl_signals_r_compute.perform_single_preload := performing_single_preload
+
+  mesh_cntl_signals_r_compute.a_bank := dataAbank
+  mesh_cntl_signals_r_compute.b_bank := dataBbank
+  mesh_cntl_signals_r_compute.d_bank := dataDbank
+
+  mesh_cntl_signals_r_compute.a_bank_acc := dataABankAcc
+  mesh_cntl_signals_r_compute.b_bank_acc := dataBBankAcc
+  mesh_cntl_signals_r_compute.d_bank_acc := dataDBankAcc
+
+  mesh_cntl_signals_r_compute.a_garbage := a_garbage
+  mesh_cntl_signals_r_compute.b_garbage := b_garbage
+  mesh_cntl_signals_r_compute.d_garbage := d_garbage
+
+  mesh_cntl_signals_r_compute.a_read_from_acc := a_read_from_acc
+  mesh_cntl_signals_r_compute.b_read_from_acc := b_read_from_acc
+  mesh_cntl_signals_r_compute.d_read_from_acc := d_read_from_acc
+
+  mesh_cntl_signals_r_compute.accumulate_zeros := accumulate_zeros
+  mesh_cntl_signals_r_compute.preload_zeros := preload_zeros //&& (in_shift(19) =/= 1.U)) //fixed for negative shift?
+
+  mesh_cntl_signals_r_compute.a_unpadded_cols := Mux(a_row_is_not_all_zeros, a_cols, 0.U)
+  mesh_cntl_signals_r_compute.b_unpadded_cols := Mux(b_row_is_not_all_zeros, b_cols, 0.U)
+  mesh_cntl_signals_r_compute.d_unpadded_cols := Mux(d_row_is_not_all_zeros, d_cols, 0.U)
+
+  mesh_cntl_signals_r_compute.total_rows := total_rows
+
+  mesh_cntl_signals_r_compute.a_fire := a_fire
+  mesh_cntl_signals_r_compute.b_fire := b_fire
+  mesh_cntl_signals_r_compute.d_fire := d_fire
+
+  mesh_cntl_signals_r_compute.c_addr := c_address_rs2
+  mesh_cntl_signals_r_compute.c_rows := c_rows
+  mesh_cntl_signals_r_compute.c_cols := c_cols
+
+  mesh_cntl_signals_r_compute.a_transpose := a_transpose
+  mesh_cntl_signals_r_compute.bd_transpose := bd_transpose
+
+  mesh_cntl_signals_r_compute.rob_id.valid := !performing_single_mul && !c_address_rs2.is_garbage()
+  mesh_cntl_signals_r_compute.rob_id.bits := cmd.bits(preload_cmd_place).rob_id.bits
+
+  mesh_cntl_signals_r_compute.dataflow := current_dataflow
+  mesh_cntl_signals_r_compute.prop := Mux(performing_single_preload, in_prop_flush, in_prop)//prop) //available propagate or not?
+  mesh_cntl_signals_r_compute.shift := in_shift
+
+  mesh_cntl_signals_r_compute.im2colling := im2col_wire && im2col_en //im2col_wire
+
+  mesh_cntl_signals_r_compute.first := !a_fire_started && !b_fire_started && !d_fire_started
+
+  }
+
   val readData = VecInit(io.srams.read.map(_.resp.bits.data))
   val accReadData = if (ex_read_from_acc) VecInit(io.acc.read_resp.map(_.bits.data.asUInt)) else readData
   val im2ColData = io.im2col.resp.bits.a_im2col.asUInt
@@ -1148,9 +1261,7 @@ class ExecuteController[T <: Data, U <: Data, V <: Data](xLen: Int, tagWidth: In
   io.checksum_addr_banks := ErrorChecker_MatmulResult_test.io.addr_banks_out
   io.checksum_valid := ErrorChecker_MatmulResult_test.io.checksum_valid
   io.a_rows := a_rows
-/*   io.Verification_completed := DontCare
-  io.checksum := DontCare
-  io.checksum_addr := DontCare
-  io.checksum_valid := DontCare
-  io.a_rows := a_rows */
+  // 测试量化模块
+  val BFPQuantizer_From_FP16_test         = Module(new BFPQuantizer_From_FP16(meshColumns * tileColumns))
+  BFPQuantizer_From_FP16_test.io.data_in := io.srams.read(0).resp.bits.data
 }

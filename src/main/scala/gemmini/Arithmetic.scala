@@ -332,27 +332,27 @@ object Arithmetic {
 
     override implicit def cast(self: Float): ArithmeticOps[Float] = new ArithmeticOps(self) {
       override def *(t: Float): Float = {
-        val t_rec = recFNFromFN(t.expWidth, t.sigWidth, t.bits)
-        val self_rec = recFNFromFN(self.expWidth, self.sigWidth, self.bits)
+        val t_rec                     = recFNFromFN(t.expWidth, t.sigWidth, t.bits)                                     // 将操作数 self 从标准 float 转为 recFN 格式
+        val self_rec                  = recFNFromFN(self.expWidth, self.sigWidth, self.bits)                            // 将操作数 t 从标准 float 转为 recFN 格式
+               
+        val t_resizer                 =  Module(new RecFNToRecFN(t.expWidth, t.sigWidth, self.expWidth, self.sigWidth)) // 进行精度匹配，将 t 转换为与 self 相同精度
+        t_resizer.io.in              := t_rec
+        t_resizer.io.roundingMode    := consts.round_near_even // consts.round_near_maxMag
+        t_resizer.io.detectTininess  := consts.tininess_afterRounding
+        val t_rec_resized             = t_resizer.io.out
+ 
+        val muladder                  = Module(new MulAddRecFN(self.expWidth, self.sigWidth))
 
-        val t_resizer =  Module(new RecFNToRecFN(t.expWidth, t.sigWidth, self.expWidth, self.sigWidth))
-        t_resizer.io.in := t_rec
-        t_resizer.io.roundingMode := consts.round_near_even // consts.round_near_maxMag
-        t_resizer.io.detectTininess := consts.tininess_afterRounding
-        val t_rec_resized = t_resizer.io.out
-
-        val muladder = Module(new MulAddRecFN(self.expWidth, self.sigWidth))
-
-        muladder.io.op := 0.U
-        muladder.io.roundingMode := consts.round_near_even // consts.round_near_maxMag
-        muladder.io.detectTininess := consts.tininess_afterRounding
-
-        muladder.io.a := self_rec
-        muladder.io.b := t_rec_resized
-        muladder.io.c := 0.U
-
-        val out = Wire(Float(self.expWidth, self.sigWidth))
-        out.bits := fNFromRecFN(self.expWidth, self.sigWidth, muladder.io.out)
+        muladder.io.op               := 0.U
+        muladder.io.roundingMode     := consts.round_near_even // consts.round_near_maxMag
+        muladder.io.detectTininess   := consts.tininess_afterRounding
+ 
+        muladder.io.a                := self_rec
+        muladder.io.b                := t_rec_resized
+        muladder.io.c                := 0.U
+ 
+        val out                       = Wire(Float(self.expWidth, self.sigWidth))
+        out.bits                     := fNFromRecFN(self.expWidth, self.sigWidth, muladder.io.out)
         out
       }
 

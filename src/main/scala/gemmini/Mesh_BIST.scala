@@ -1,53 +1,35 @@
-
 package gemmini
 
 import chisel3._
 import chisel3.util._
 import chisel3.experimental._
 
-/**
-  * A Grid is a 2D array of Tile modules with registers in between each tile and
-  * registers from the bottom row and rightmost column of tiles to the Grid outputs.
-  * @param width
-  * @param tileRows
-  * @param tileColumns
-  * @param meshRows
-  * @param meshColumns
-  */
-class Mesh[T <: Data : Arithmetic](inputType: T, outputType: T, accType: T,
+class Mesh_BIST[T <: Data : Arithmetic](inputType: T, outputType: T, accType: T,
                                    df: Dataflow.Value, tree_reduction: Boolean, tile_latency: Int,
                                    max_simultaneous_matmuls: Int, output_delay: Int,
                                    val tileRows: Int, val tileColumns: Int,
-                                   val meshRows: Int, val meshColumns: Int) extends Module {
-//tile_latency: 每个单元的延迟
-//max_simultaneous_matmuls: 最大同时乘法矩阵的数量
-//output_delay: 输出的延迟  
-//tileRows和tileColumns: 每个Tile的行和列数
-//meshRows和meshColumns: 网格的行和列数                                
+                                   val meshRows: Int, val meshColumns: Int) extends Module {                              
   val io = IO(new Bundle {
-    val in_a = Input(Vec(meshRows, Vec(tileRows, inputType)))//横着
-    val in_b = Input(Vec(meshColumns, Vec(tileColumns, inputType)))//竖着
-    val in_d = Input(Vec(meshColumns, Vec(tileColumns, inputType)))
-    val in_control = Input(Vec(meshColumns, Vec(tileColumns, new PEControl(accType))))
-    val in_id = Input(Vec(meshColumns, Vec(tileColumns, UInt(log2Up(max_simultaneous_matmuls).W)))) // The unique id of this particular matmul
-    val in_last = Input(Vec(meshColumns, Vec(tileColumns, Bool())))
-    val out_b = Output(Vec(meshColumns, Vec(tileColumns, outputType)))
-    val out_c = Output(Vec(meshColumns, Vec(tileColumns, outputType)))
-    val in_valid = Input(Vec(meshColumns, Vec(tileColumns, Bool())))
-    val out_valid = Output(Vec(meshColumns, Vec(tileColumns, Bool())))
-    val out_control = Output(Vec(meshColumns, Vec(tileColumns, new PEControl(accType))))
-    val out_id = Output(Vec(meshColumns, Vec(tileColumns, UInt(log2Up(max_simultaneous_matmuls).W))))
-    val out_last = Output(Vec(meshColumns, Vec(tileColumns, Bool())))
+    val in_a         = Input (Vec(meshRows, Vec(tileRows, inputType)))//横着
+    val in_b         = Input (Vec(meshColumns, Vec(tileColumns, inputType)))//竖着
+    val in_d         = Input (Vec(meshColumns, Vec(tileColumns, inputType)))
+    val in_control   = Input (Vec(meshColumns, Vec(tileColumns, new PEControl(accType))))
+    val in_id        = Input (Vec(meshColumns, Vec(tileColumns, UInt(log2Up(max_simultaneous_matmuls).W)))) // The unique id of this particular matmul
+    val in_last      = Input (Vec(meshColumns, Vec(tileColumns, Bool())))
+    val out_b        = Output(Vec(meshColumns, Vec(tileColumns, outputType)))
+    val out_c        = Output(Vec(meshColumns, Vec(tileColumns, outputType)))
+    val in_valid     = Input (Vec(meshColumns, Vec(tileColumns, Bool())))
+    val out_valid    = Output(Vec(meshColumns, Vec(tileColumns, Bool())))
+    val out_control  = Output(Vec(meshColumns, Vec(tileColumns, new PEControl(accType))))
+    val out_id       = Output(Vec(meshColumns, Vec(tileColumns, UInt(log2Up(max_simultaneous_matmuls).W))))
+    val out_last     = Output(Vec(meshColumns, Vec(tileColumns, Bool())))
+    val bist_control = Input (UInt(2.W))
   })
+  
   dontTouch(io.out_id)
-  // mesh(r)(c) => Tile at row r, column c
-  val mesh: Seq[Seq[Tile[T]]] = Seq.fill(meshRows, meshColumns)(Module(new Tile(inputType, outputType, accType, df, tree_reduction, max_simultaneous_matmuls, tileRows, tileColumns)))
+  val mesh: Seq[Seq[Tile_BIST[T]]] = Seq.fill(meshRows, meshColumns)(Module(new Tile_BIST(inputType, outputType, accType, df, tree_reduction, max_simultaneous_matmuls, tileRows, tileColumns)))
   val meshT = mesh.transpose
-  //这个函数最后返回的是一个类型为T的信号，它是输入数据t经过指定延迟后得到的输出信号。具体来说，这个信号在latency个时钟周期后会反映输入数据t的值，并
-  //且保持有效性信号valid的状态。
   def pipe[T <: Data](valid: Bool, t: T, latency: Int): T = {
-    // The default "Pipe" function apparently resets the valid signals to false.B. We would like to avoid using global
-    // signals in the Mesh, so over here, we make it clear that the reset signal will never be asserted
     chisel3.withReset(false.B) { Pipe(valid, t, latency).bits }
   }
 
@@ -120,16 +102,12 @@ class Mesh[T <: Data : Arithmetic](inputType: T, outputType: T, accType: T,
     }
   }
 
-  // Capture out_vec and out_control_vec (connect IO to bottom row of mesh)
-  // (The only reason we have so many zips is because Scala doesn't provide a zipped function for Tuple4)
   for (((((((b, c), v), ctrl), id), last), tile) <- io.out_b zip io.out_c zip io.out_valid zip io.out_control zip io.out_id zip io.out_last zip mesh.last) {
-    // TODO we pipelined this to make physical design easier. Consider removing these if possible
-    // TODO shouldn't we clock-gate these signals with "garbage" as well?
-    b := ShiftRegister(tile.io.out_b, output_delay)
-    c := ShiftRegister(tile.io.out_c, output_delay)
-    v := ShiftRegister(tile.io.out_valid, output_delay)
+    b    := ShiftRegister(tile.io.out_b, output_delay)
+    c    := ShiftRegister(tile.io.out_c, output_delay)
+    v    := ShiftRegister(tile.io.out_valid, output_delay)
     ctrl := ShiftRegister(tile.io.out_control, output_delay)
-    id := ShiftRegister(tile.io.out_id, output_delay)
+    id   := ShiftRegister(tile.io.out_id, output_delay)
     last := ShiftRegister(tile.io.out_last, output_delay)
   }
 }

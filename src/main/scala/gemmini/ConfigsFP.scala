@@ -30,7 +30,7 @@ object GemminiFPConfigs {
 
     sp_banks = 4,
     sp_singleported = true,
-    acc_banks = 1,
+    acc_banks = 2,
     acc_latency = 2,
     acc_singleported = false,
     acc_sub_banks = -1,
@@ -51,7 +51,7 @@ object GemminiFPConfigs {
     inputType = Float(8, 24),
     spatialArrayOutputType = Float(8, 24),
     accType = Float(8, 24),
-
+    testType = Float(8, 24),
     mvin_scale_args = Some(ScaleArguments((t: Float, u: Float) => t * u, 4, Float(8, 24), -1, identity = "1.0", c_str="((x) * (scale))")),
     mvin_scale_acc_args = Some(ScaleArguments((t: Float, u: Float) => t * u, 4, Float(8, 24), -1, identity = "1.0", c_str="((x) * (scale))")),
     mvin_scale_shared = false,
@@ -83,13 +83,30 @@ object GemminiFPConfigs {
   //FP32 Single Precision Configuration
   val FP32DefaultConfig = defaultFPConfig.copy(inputType = Float(8, 24), spatialArrayOutputType = Float(8, 24), accType = Float(8, 24),
                                                tile_latency = 2,
+                                               meshRows = 16,meshColumns = 16,
+                                               tileRows = 2,tileColumns = 2,
+                                               sp_capacity = CapacityInKilobytes(2048),
+                                               acc_capacity = CapacityInKilobytes(128),
                                                mvin_scale_args = Some(ScaleArguments((t: Float, u: Float) => t * u, 4, Float(8, 24), -1, identity = "1.0", c_str="((x) * (scale))")),
                                                mvin_scale_acc_args = Some(ScaleArguments((t: Float, u: Float) => t * u, 4, Float(8, 24), -1, identity = "1.0", c_str="((x) * (scale))")),
                                               )
- 
+  val FP32DefaultConfig1 = defaultFPConfig.copy(inputType = Float(8, 24), spatialArrayOutputType = Float(8, 24), accType = Float(8, 24),
+                                               tile_latency = 2,
+                                               meshRows = 16, meshColumns = 16,
+                                               tileRows = 1, tileColumns = 1,
+                                               acc_banks = 2,
+                                               sp_capacity = CapacityInKilobytes(1024),
+                                               acc_capacity = CapacityInKilobytes(64),
+                                               mvin_scale_args = Some(ScaleArguments((t: Float, u: Float) => t * u, 4, Float(8, 24), -1, identity = "1.0", c_str="((x) * (scale))")),
+                                               mvin_scale_acc_args = Some(ScaleArguments((t: Float, u: Float) => t * u, 4, Float(8, 24), -1, identity = "1.0", c_str="((x) * (scale))")),
+                                              )
   //FP16 Half Precision Configuration
   val FP16DefaultConfig = defaultFPConfig.copy(inputType = Float(5, 11), spatialArrayOutputType = Float(5, 11), accType = Float(8, 24),
                                                tile_latency = 2,
+                                               meshRows = 16,meshColumns = 16,
+                                               tileRows = 2,tileColumns = 2,
+                                               sp_capacity = CapacityInKilobytes(1024),
+                                               acc_capacity = CapacityInKilobytes(128),
                                                mvin_scale_args = Some(ScaleArguments((t: Float, u: Float) => t * u, 4, Float(5, 11), -1, identity = "1.0", c_str="((x) * (scale))")),
                                                mvin_scale_acc_args = Some(ScaleArguments((t: Float, u: Float) => t * u, 4, Float(5, 11), -1, identity = "1.0", c_str="((x) * (scale))")),
                                               )
@@ -123,6 +140,15 @@ class GemminiFP32DefaultConfig extends Config((site, here, up) => {
   )
 })
 
+class GemminiFP32DefaultConfig1 extends Config((site, here, up) => {
+  case BuildRoCC => Seq(
+      (p: Parameters) => {
+        implicit val q = p
+        implicit val v = implicitly[ValName]
+        LazyModule(new Gemmini(GemminiFPConfigs.FP32DefaultConfig1))
+    }
+  )
+})
 
 //===========FP16 Default Config=========
 class GemminiFP16DefaultConfig extends Config((site, here, up) => {
